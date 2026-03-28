@@ -4,6 +4,7 @@ const morgan = require("morgan");
 
 const attachActor = require("./middlewares/actor.middleware");
 const authRouter = require("./routes/auth.routes");
+const usersRouter = require("./routes/users.routes");
 
 
 const app = express();
@@ -21,7 +22,15 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
-
+app.use("/api/users", usersRouter);
+app.use("/api/products", productsRouter);
+app.use("/api/cart", cartRouter);
+app.use("/api/orders", ordersRouter);
+app.use("/api/payments", paymentsRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/seller", sellerRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/marketing", marketingRouter);
 
 app.use((error, _req, res, _next) => {
     console.error(error);
