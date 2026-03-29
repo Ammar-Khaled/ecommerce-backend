@@ -6,6 +6,7 @@ const SellerProfile = require("./sellerProfile.model");
 const Order = require("./order.model");
 const Cart = require("./cart.model");
 const Notification = require("./notification.model");
+const RevokedToken = require("./revokedToken.model");
 
 module.exports = {
     User,
@@ -16,4 +17,5 @@ module.exports = {
     Order,
     Cart,
     Notification,
+    RevokedToken,
 };

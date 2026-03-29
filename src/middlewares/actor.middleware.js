@@ -1,4 +1,4 @@
-const { User } = require("../data/models");
+const { User, RevokedToken } = require("../data/models");
 const { getTokenFromRequest, verifyAccessToken } = require("../utils/jwt.utils");
 
 const attachGuestActor = (req, next) => {
@@ -14,6 +14,11 @@ const attachActor = async (req, _res, next) => {
     try {
         const token = getTokenFromRequest(req);
         if (token) {
+            const revoked = await RevokedToken.findOne({ token }).lean();
+            if (revoked) {
+                return attachGuestActor(req, next);
+            }
+
             const payload = verifyAccessToken(token);
             const user = await User.findOne({
                 id: Number(payload.userId),

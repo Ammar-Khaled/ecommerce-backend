@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
-const { User, SellerProfile } = require("../data/models");
+const { User, SellerProfile, RevokedToken } = require("../data/models");
 const { getNextId } = require("../data/store");
-const { JWT_EXPIRES_IN, signAccessToken } = require("../utils/jwt.utils");
+const { JWT_EXPIRES_IN, signAccessToken, getTokenFromRequest, verifyAccessToken } = require("../utils/jwt.utils");
 
 const VALID_ROLES = ["customer", "seller", "admin"];
 const BCRYPT_ROUNDS = 10;
@@ -99,7 +99,29 @@ const login = async (req, res) => {
     });
 };
 
+const logout = async (req, res) => {
+    const token = getTokenFromRequest(req);
+    if (!token) {
+        return res.status(400).json({ message: "No token provided" });
+    }
+
+    try {
+        verifyAccessToken(token);
+
+        await RevokedToken.create({ token });
+
+        return res.json({ message: "Logged out" });
+    } catch (error) {
+        if (error && error.name === "TokenExpiredError") {
+            return res.json({ message: "Token already expired)" });
+        }
+        // JsonWebTokenError
+        return res.status(400).json({ message: "Invalid token" });
+    }
+};
+
 module.exports = {
     register,
     login,
+    logout,
 };
