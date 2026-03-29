@@ -48,7 +48,7 @@ const computeTotals = (items) => {
     const shipping = subtotal === 0 || subtotal >= 100 ? 0 : 5;
     const total = Number((taxableAmount + tax + shipping).toFixed(2));
 
-    return { subtotal, discount, tax, shipping, total, currency: "USD" };
+    return { subtotal, discount, tax, shipping, total, currency: "EGP" };
 };
 
 const getCart = async (req, res) => {
