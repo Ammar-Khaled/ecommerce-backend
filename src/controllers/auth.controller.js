@@ -1,127 +1,263 @@
-const bcrypt = require("bcryptjs");
 const { User, SellerProfile, RevokedToken } = require("../data/models");
 const { getNextId } = require("../data/store");
+const crypto = require("crypto");
 const { JWT_EXPIRES_IN, signAccessToken, getTokenFromRequest, verifyAccessToken } = require("../utils/jwt.utils");
+const { sendVerificationEmailOTP } = require("../nodemailer/sendVerificationEmailOTP");
+const { sendPasswordToken } = require("../nodemailer/sendPasswordResetToken");
+const { sendPasswordResetSuccess } = require("../nodemailer/sendPasswordResetSuccess");
 
 const VALID_ROLES = ["customer", "seller", "admin"];
-const BCRYPT_ROUNDS = 10;
 
 const sanitizeUser = (userDoc) => {
-    if (!userDoc) {
-        return null;
-    }
+  if (!userDoc) {
+    return null;
+  }
 
-    const user = userDoc.toObject ? userDoc.toObject() : userDoc;
-    delete user.__v;
-    delete user._id;
-    delete user.password;
-    return user;
+  const user = userDoc.toObject ? userDoc.toObject() : userDoc;
+  delete user.__v;
+  delete user._id;
+  delete user.password;
+  return user;
 };
 
 const register = async (req, res) => {
-    const { name, email, phone, password, role = "customer" } = req.body;
+  const { name, email, phone, password, confirmPassword, role = "customer" } = req.body;
 
-    if (!name || !email || !password) {
-        return res.status(400).json({ message: "name, email, and password are required" });
-    }
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: "name, email, and password are required" });
+  }
 
-    const normalizedEmail = String(email).toLowerCase();
-    const existing = await User.findOne({ email: normalizedEmail }).lean();
-    if (existing) {
-        return res.status(409).json({ message: "Email already exists" });
-    }
+  if (confirmPassword !== undefined && password !== confirmPassword) {
+    return res.status(400).json({ message: "password and confirmPassword must match" });
+  }
 
-    const normalizedRole = VALID_ROLES.includes(role) ? role : "customer";
+  const normalizedEmail = String(email).toLowerCase();
+  const existing = await User.findOne({ email: normalizedEmail }).lean();
+  if (existing) {
+    return res.status(409).json({ message: "Email already exists" });
+  }
 
-    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  const normalizedRole = VALID_ROLES.includes(role) ? role : "customer";
 
-    const newUser = await User.create({
-        id: await getNextId(User),
-        name,
-        email: normalizedEmail,
-        phone: phone || null,
-        password: hashedPassword,
-        role: normalizedRole,
-        address: null,
-        paymentDetails: [],
-        wishlist: [],
-        isActive: true,
-        isDeleted: false,
+  const newUser = await User.create({
+    id: await getNextId(User),
+    name,
+    email: normalizedEmail,
+    phone: phone || null,
+    password,
+    confirmPassword: confirmPassword || password,
+    role: normalizedRole,
+    address: null,
+    paymentDetails: [],
+    wishlist: [],
+    isActive: true,
+    isDeleted: false,
+  });
+
+  if (normalizedRole === "seller") {
+    await SellerProfile.create({
+      id: await getNextId(SellerProfile),
+      userId: newUser.id,
+      storeName: `${name} Store`,
+      payoutMethod: "pending",
+      isApproved: false,
     });
+  }
 
-    if (normalizedRole === "seller") {
-        await SellerProfile.create({
-            id: await getNextId(SellerProfile),
-            userId: newUser.id,
-            storeName: `${name} Store`,
-            payoutMethod: "pending",
-            isApproved: false,
-        });
-    }
+  const token = signAccessToken(newUser);
 
-    const token = signAccessToken(newUser);
+  try {
+    const verificationCode = newUser.createOTP();
+    await newUser.save({ validateBeforeSave: false });
+    await sendVerificationEmailOTP(newUser, verificationCode);
+  } catch (emailError) {
+    console.error("Failed to send verification OTP:", emailError);
+  }
 
-    return res.status(201).json({
-        message: "User registered successfully. Confirmation email flow is pending integration.",
-        token,
-        tokenType: "Bearer",
-        expiresIn: JWT_EXPIRES_IN,
-        user: sanitizeUser(newUser),
-    });
+  return res.status(201).json({
+    message: "User registered successfully",
+    token,
+    tokenType: "Bearer",
+    expiresIn: JWT_EXPIRES_IN,
+    user: sanitizeUser(newUser),
+  });
 };
 
 const login = async (req, res) => {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    const user = await User.findOne({
-        email: String(email).toLowerCase(),
-        isActive: true,
-        isDeleted: false,
-    });
+  if (!email || !password) {
+    return res.status(400).json({ message: "email and password are required" });
+  }
 
-    if (!user || !user.password) {
-        return res.status(401).json({ message: "Invalid credentials or inactive account" });
-    }
+  const user = await User.findOne({
+    email: String(email).toLowerCase(),
+    isActive: true,
+    isDeleted: false,
+  });
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-        return res.status(401).json({ message: "Invalid credentials or inactive account" });
-    }
+  if (!user || !user.password) {
+    return res.status(401).json({ message: "Invalid credentials or inactive account" });
+  }
 
-    const token = signAccessToken(user);
+  const isValidPassword = await user.comparePassword(password);
+  if (!isValidPassword) {
+    return res.status(401).json({ message: "Invalid credentials or inactive account" });
+  }
 
-    return res.json({
-        message: "Login successful",
-        token,
-        tokenType: "Bearer",
-        expiresIn: JWT_EXPIRES_IN,
-        user: sanitizeUser(user),
-    });
+  await User.updateOne({ id: user.id }, { $set: { lastLogin: new Date() } });
+
+  const token = signAccessToken(user);
+
+  return res.json({
+    message: "Login successful",
+    token,
+    tokenType: "Bearer",
+    expiresIn: JWT_EXPIRES_IN,
+    user: sanitizeUser(user),
+  });
 };
 
 const logout = async (req, res) => {
-    const token = getTokenFromRequest(req);
-    if (!token) {
-        return res.status(400).json({ message: "No token provided" });
+  const token = getTokenFromRequest(req);
+  if (!token) {
+    return res.status(400).json({ message: "No token provided" });
+  }
+
+  try {
+    verifyAccessToken(token);
+
+    await RevokedToken.create({ token });
+
+    return res.json({ message: "Logged out" });
+  } catch (error) {
+    if (error && error.name === "TokenExpiredError") {
+      return res.json({ message: "Token already expired)" });
     }
+    // JsonWebTokenError
+    return res.status(400).json({ message: "Invalid token" });
+  }
+};
+const verifyEmail = async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ message: "Verification code is required" });
+  }
 
-    try {
-        verifyAccessToken(token);
+  const user = await User.findOne({
+    OTP: String(code),
+    OTPExpires: { $gt: Date.now() },
+  });
 
-        await RevokedToken.create({ token });
+  if (!user) {
+    return res.status(400).json({ message: "Invalid or expired verification code" });
+  }
 
-        return res.json({ message: "Logged out" });
-    } catch (error) {
-        if (error && error.name === "TokenExpiredError") {
-            return res.json({ message: "Token already expired)" });
-        }
-        // JsonWebTokenError
-        return res.status(400).json({ message: "Invalid token" });
-    }
+  user.isVerified = true;
+  user.OTP = undefined;
+  user.OTPExpires = undefined;
+  await user.save();
+
+  return res.status(200).json({
+    message: "Email verified successfully",
+    user: sanitizeUser(user),
+  });
+};
+
+/**
+ * @desc    Forgot password - send reset token
+ * @route   POST /api/auth/forgot-password
+ * @method  POST
+ * @access  Public
+ */
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "email is required" });
+  }
+
+  const user = await User.findOne({ email: String(email).toLowerCase() });
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  await sendPasswordToken(user);
+
+  return res.status(200).json({ message: "Password reset link sent to your email" });
+};
+
+/**
+ * @desc    Reset password using token
+ * @route   PUT /api/auth/reset-password/:token
+ * @method  PUT
+ * @access  Public
+ */
+const resetPassword = async (req, res) => {
+  const token = req.params.token || req.body.token;
+  const { password, confirmPassword } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ message: "Reset token is required" });
+  }
+
+  if (!password || !confirmPassword) {
+    return res.status(400).json({ message: "Password and confirm password are required" });
+  }
+
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: "Password and confirmPassword must match" });
+  }
+
+  const resetToken = crypto.createHash("sha256").update(token).digest("hex");
+  const user = await User.findOne({
+    resetPasswordToken: resetToken,
+    resetPasswordExpiresAt: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    return res.status(400).json({ message: "Invalid or expired reset token" });
+  }
+
+  user.password = password;
+  user.confirmPassword = confirmPassword;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpiresAt = undefined;
+  await user.save();
+
+  try {
+    await sendPasswordResetSuccess(user);
+  } catch (emailError) {
+    console.error("Failed to send password reset success email:", emailError);
+  }
+
+  return res.status(200).json({ message: "Password reset successfully" });
+};
+
+/**
+ * @desc    Check if user is logged in
+ * @route   GET /api/auth/check-auth
+ * @method  GET
+ * @access  Private/User
+ */
+const checkAuth = async (req, res) => {
+  if (!req.actor || !req.actor.isAuthenticated || !req.actor.user) {
+    return res.status(401).json({ message: "You have to be logged in" });
+  }
+
+  return res.status(200).json({
+    message: "User is logged in",
+    user: sanitizeUser(req.actor.user),
+  });
 };
 
 module.exports = {
-    register,
-    login,
-    logout,
+  register,
+  login,
+  logout,
+  verifyEmail,
+  forgotPassword,
+  resetPassword,
+  checkAuth,
 };
