@@ -1,14 +1,16 @@
 const express = require("express");
 const productsController = require("../controllers/products.controller");
+const validateRequest = require("../middlewares/validateRequest");
+const { productSchemas } = require("../validation/schemas");
 
 const router = express.Router();
 
 router.get("/categories", productsController.getCategories);
-router.get("/", productsController.listProducts);
-router.get("/:id", productsController.getProductById);
-router.post("/", productsController.createProduct);
-router.patch("/:id/stock", productsController.updateProductStock);
-router.get("/:id/reviews", productsController.getProductReviews);
-router.post("/:id/reviews", productsController.createProductReview);
+router.get("/", validateRequest({ query: productSchemas.listQuery }), productsController.listProducts);
+router.get("/:id", validateRequest({ params: productSchemas.idParam }), productsController.getProductById);
+router.post("/", validateRequest({ body: productSchemas.createProduct }), productsController.createProduct);
+router.patch("/:id/stock", validateRequest({ params: productSchemas.idParam, body: productSchemas.updateStock }), productsController.updateProductStock);
+router.get("/:id/reviews", validateRequest({ params: productSchemas.idParam }), productsController.getProductReviews);
+router.post("/:id/reviews", validateRequest({ params: productSchemas.idParam, body: productSchemas.reviewBody }), productsController.createProductReview);
 
 module.exports = router;
