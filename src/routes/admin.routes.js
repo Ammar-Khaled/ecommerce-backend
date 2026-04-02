@@ -12,6 +12,11 @@ router.patch(
     validateRequest({ params: adminSchemas.userIdParam, body: adminSchemas.restrictUserBody }),
     adminController.restrictUser
 );
+router.patch(
+    "/users/:id/unrestrict",
+    validateRequest({ params: adminSchemas.userIdParam }),
+    adminController.unrestrictUser
+);
 router.delete("/users/:id", validateRequest({ params: adminSchemas.userIdParam }), adminController.deleteUser);
 router.post("/categories", validateRequest({ body: adminSchemas.createCategory }), adminController.createCategory);
 router.post("/products", validateRequest({ body: adminSchemas.createProduct }), adminController.createProduct);

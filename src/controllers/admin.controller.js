@@ -57,6 +57,24 @@ const restrictUser = async (req, res, next) => {
     return res.json({ message: "User status updated", user });
 };
 
+const unrestrictUser = async (req, res, next) => {
+    if (!requireAdmin(req, res)) {
+        return;
+    }
+
+    const user = await User.findOneAndUpdate(
+        { id: Number(req.params.id) },
+        { $set: { isActive: true } },
+        { new: true }
+    ).lean();
+
+    if (!user) {
+        return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.json({ message: "User unrestricted", user });
+};
+
 const deleteUser = async (req, res, next) => {
     if (!requireAdmin(req, res)) {
         return;
@@ -142,6 +160,7 @@ module.exports = {
     getDashboard,
     getUsers,
     restrictUser,
+    unrestrictUser,
     deleteUser,
     createCategory,
     createProduct,
