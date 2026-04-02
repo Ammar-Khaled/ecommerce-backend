@@ -29,7 +29,7 @@ const seedDatabase = async () => {
             {
                 id: 1,
                 name: "Admin User",
-                email: "admin@shop.local",
+                email: "admin@gmail.com",
                 phone: "01000000001",
                 password: "$2a$10$bIVubjJgoyZOAazrWuX0f.Daf8/zbgkTmL62n0upy7ZytFXi72nay", // admin123
                 role: "admin",
@@ -42,7 +42,7 @@ const seedDatabase = async () => {
             {
                 id: 2,
                 name: "Seller User",
-                email: "seller@shop.local",
+                email: "seller@gmail.com",
                 phone: "01000000002",
                 password: "$2a$10$Yo1AQj/5XeqaUGgVzNwtluEn5pKMWUXU8kM1Qe5TvRwLqjvhf8qfK",  // seller123
                 role: "seller",
@@ -55,7 +55,7 @@ const seedDatabase = async () => {
             {
                 id: 3,
                 name: "Customer User",
-                email: "customer@shop.local",
+                email: "customer@gmail.com",
                 phone: "01000000003",
                 password: "$2a$10$9NZd7CP7VdZr6TvOUd2kr.YWelJFSSR3vbZvSzTXQb2OA36.5CtjK",  // customer123
                 role: "customer",
