@@ -6,6 +6,7 @@ const { productSchemas } = require("../validation/schemas");
 const router = express.Router();
 
 router.get("/categories", productsController.getCategories);
+router.get("/top", productsController.getTopProducts);
 router.get("/", validateRequest({ query: productSchemas.listQuery }), productsController.listProducts);
 router.get("/:id", validateRequest({ params: productSchemas.idParam }), productsController.getProductById);
 router.post("/", validateRequest({ body: productSchemas.createProduct }), productsController.createProduct);

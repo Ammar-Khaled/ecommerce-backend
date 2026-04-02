@@ -75,7 +75,8 @@ const register = async (req, res) => {
   }
 
   return res.status(201).json({
-    message: "User registered successfully",
+    message: "User registered successfully. Please verify your email.",
+    requiresEmailVerification: true,
     token,
     tokenType: "Bearer",
     expiresIn: JWT_EXPIRES_IN,
@@ -103,6 +104,14 @@ const login = async (req, res) => {
   const isValidPassword = await user.comparePassword(password);
   if (!isValidPassword) {
     return res.status(401).json({ message: "Invalid credentials or inactive account" });
+  }
+
+  if (!user.isVerified) {
+    return res.status(403).json({
+      message: "Please verify your email before logging in",
+      requiresEmailVerification: true,
+      email: user.email,
+    });
   }
 
   await User.updateOne({ id: user.id }, { $set: { lastLogin: new Date() } });
@@ -139,12 +148,13 @@ const logout = async (req, res) => {
   }
 };
 const verifyEmail = async (req, res) => {
-  const { code } = req.body;
-  if (!code) {
-    return res.status(400).json({ message: "Verification code is required" });
+  const { email, code } = req.body;
+  if (!email || !code) {
+    return res.status(400).json({ message: "Email and verification code are required" });
   }
 
   const user = await User.findOne({
+    email: String(email).toLowerCase(),
     OTP: String(code),
     OTPExpires: { $gt: Date.now() },
   });
