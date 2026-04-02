@@ -4,6 +4,7 @@ const { getNextId } = require("./store");
 const seedDatabase = async () => {
   const [userCount, categoryCount, productCount, reviewCount, sellerProfileCount] = await Promise.all([User.countDocuments(), Category.countDocuments(), Product.countDocuments(), Review.countDocuments(), SellerProfile.countDocuments()]);
 
+
   if (categoryCount === 0) {
     await Category.insertMany([
       { id: 1, name: "Apparel" },
