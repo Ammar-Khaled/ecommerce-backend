@@ -176,7 +176,7 @@ const createProduct = async (req, res, next) => {
     return;
   }
 
-  const { name, description, price, categoryId, stock = 0, images = [] } = req.body;
+  const { name, description, price, categoryId, stock = 0, images = [], isActive } = req.body;
 
   if (!name || price === undefined || !categoryId) {
     return res.status(400).json({ message: "name, price, and categoryId are required" });
@@ -196,7 +196,7 @@ const createProduct = async (req, res, next) => {
     categoryId: Number(categoryId),
     stock: Number(stock),
     sellerId: getSellerId(req),
-    isActive: true,
+    isActive: isActive === undefined ? true : Boolean(isActive),
     images: Array.isArray(images) ? images : [],
   });
 

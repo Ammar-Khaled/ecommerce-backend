@@ -76,6 +76,7 @@ const productSchemas = {
     price: nonNegativeNumber.required(),
     categoryId: positiveId.required(),
     stock: Joi.number().integer().min(0).default(0),
+    isActive: Joi.boolean(),
     images: Joi.array().items(Joi.string().trim().min(1)).default([]),
   }).unknown(false),
   updateStock: Joi.object({
@@ -154,6 +155,7 @@ const sellerSchemas = {
     price: nonNegativeNumber.required(),
     categoryId: positiveId.required(),
     stock: Joi.number().integer().min(0).default(0),
+    isActive: Joi.boolean(),
     images: Joi.array().items(Joi.string().trim().min(1)).default([]),
   }).unknown(false),
   updateProduct: Joi.object({
