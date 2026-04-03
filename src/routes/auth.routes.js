@@ -10,11 +10,8 @@ router.post("/login", validateRequest({ body: authSchemas.login }), authControll
 router.post("/logout", authController.logout);
 router.post("/verify-email", validateRequest({ body: authSchemas.verifyEmail }), authController.verifyEmail);
 router.post("/forgot-password", validateRequest({ body: authSchemas.forgotPassword }), authController.forgotPassword);
-router.put(
-    "/reset-password/:token",
-    validateRequest({ params: authSchemas.resetPasswordParams, body: authSchemas.resetPasswordBody }),
-    authController.resetPassword
-);
+router.put("/reset-password/:token", validateRequest({ params: authSchemas.resetPasswordParams, body: authSchemas.resetPasswordBody }), authController.resetPassword);
+router.put("/reset-password", validateRequest({ body: authSchemas.resetPasswordBodyWithToken }), authController.resetPassword);
 router.get("/check-auth", authController.checkAuth);
 
 module.exports = router;
