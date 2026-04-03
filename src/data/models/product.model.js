@@ -10,6 +10,7 @@ const productSchema = new mongoose.Schema(
         categoryId: { type: Number, required: true, index: true },
         stock: { type: Number, default: 0, min: 0 },
         sellerId: { type: Number, required: true, index: true },
+        isActive: { type: Boolean, default: false },
         images: { type: [String], default: [] },
     },
     { timestamps: true }

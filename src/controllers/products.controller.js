@@ -142,6 +142,42 @@ const getProductById = async (req, res) => {
     });
 };
 
+const activateProduct = async (req, res, next) => {
+    if (!requireSellerOrAdmin(req, res)) {
+        return;
+    }
+    if (req.actor.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can activate products" });
+    }
+    const product = await Product.findOneAndUpdate(
+        { id: Number(req.params.id) },
+        { isActive: true },
+        { new: true }
+    ).lean();
+    if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+    }
+    return res.json({ message: "Product activated", product });  
+}
+
+const deactivateProduct = async (req, res, next) => {
+    if (!requireSellerOrAdmin(req, res)) {
+        return;
+    }
+    if (req.actor.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can deactivate products" });
+    }
+    const product = await Product.findOneAndUpdate(
+        { id: Number(req.params.id) },
+        { isActive: false },
+        { new: true }
+    ).lean();
+    if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+    }
+    return res.json({ message: "Product deactivated", product });
+}
+
 const createProduct = async (req, res) => {
     if (!requireSellerOrAdmin(req, res)) {
         return;
@@ -252,6 +288,23 @@ const createProductReview = async (req, res) => {
     return res.status(201).json({ message: "Review submitted", review });
 };
 
+const deleteProduct = async (req, res) => {
+    if (!requireSellerOrAdmin(req, res)) {
+        return;
+    }
+    if (req.actor.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can delete products" });
+    }
+
+    const product = await Product.findOneAndDelete({ id: Number(req.params.id) }).lean();
+    if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+    }
+
+    return res.json({ message: "Product deleted", product });
+};
+
+
 module.exports = {
     getCategories,
     listProducts,
@@ -260,4 +313,7 @@ module.exports = {
     updateProductStock,
     getProductReviews,
     createProductReview,
+    activateProduct,
+    deleteProduct,
+    deactivateProduct,
 };
