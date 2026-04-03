@@ -340,4 +340,5 @@ module.exports = {
   activateProduct,
   deleteProduct,
   deactivateProduct,
+  getTopProducts,
 };
