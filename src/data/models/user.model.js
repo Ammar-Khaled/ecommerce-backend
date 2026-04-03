@@ -28,6 +28,16 @@ const userSchema = new mongoose.Schema(
       enum: ["customer", "seller", "admin"],
       default: "customer",
     },
+    sellerInfo: {
+      isApproved: { type: Boolean, default: false },
+      approvalStatus: {
+        type: String,
+        enum: ["none", "pending", "approved", "rejected"],
+        default: "none",
+      },
+      requestedAt: { type: Date, default: null },
+      approvedAt: { type: Date, default: null },
+    },
     profilePicture: {
       fileId: String,
       imagePath: {

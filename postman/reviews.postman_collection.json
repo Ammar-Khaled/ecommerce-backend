@@ -1,0 +1,129 @@
+{
+  "info": {
+    "name": "E-commerce Reviews API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Review endpoints for product ratings and comments with purchase-gated creation and one-review-per-user rules."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000/api"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": "1"
+    },
+    {
+      "key": "reviewId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get Product Reviews",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}/reviews",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}", "reviews"]
+        }
+      }
+    },
+    {
+      "name": "Create Product Review",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Excellent quality and finish.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}/reviews",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}", "reviews"]
+        }
+      }
+    },
+    {
+      "name": "Update Product Review",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Still great after a week of use.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}/reviews/{{reviewId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}", "reviews", "{{reviewId}}"]
+        }
+      }
+    },
+    {
+      "name": "Delete Product Review",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/products/{{productId}}/reviews/{{reviewId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "{{productId}}", "reviews", "{{reviewId}}"]
+        }
+      }
+    },
+    {
+      "name": "Get My Reviews",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/users/me/reviews",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "me", "reviews"]
+        }
+      }
+    }
+  ]
+}

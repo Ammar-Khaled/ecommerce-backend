@@ -109,7 +109,19 @@ const register = async (req, res, next) => {
     return res.status(409).json({ message: "Seller profile already exists", profile: existing });
   }
 
-  await User.updateOne({ id: req.actor.userId }, { $set: { role: "seller" } });
+  await User.updateOne(
+    { id: req.actor.userId },
+    {
+      $set: {
+        role: "seller",
+        isActive: false,
+        "sellerInfo.isApproved": false,
+        "sellerInfo.approvalStatus": "pending",
+        "sellerInfo.requestedAt": new Date(),
+        "sellerInfo.approvedAt": null,
+      },
+    },
+  );
 
   const profile = await SellerProfile.create({
     id: await getNextId(SellerProfile),
@@ -119,7 +131,7 @@ const register = async (req, res, next) => {
     isApproved: false,
   });
 
-  return res.status(201).json({ message: "Seller registration submitted", profile });
+  return res.status(201).json({ message: "Seller registration submitted and pending admin approval", profile });
 };
 
 const createProfile = register;
@@ -176,7 +188,7 @@ const createProduct = async (req, res, next) => {
     return;
   }
 
-  const { name, description, price, categoryId, stock = 0, images = [], isActive } = req.body;
+  const { name, description, price, categoryId, stock = 0, images = [] } = req.body;
 
   if (!name || price === undefined || !categoryId) {
     return res.status(400).json({ message: "name, price, and categoryId are required" });
@@ -196,11 +208,12 @@ const createProduct = async (req, res, next) => {
     categoryId: Number(categoryId),
     stock: Number(stock),
     sellerId: getSellerId(req),
-    isActive: isActive === undefined ? true : Boolean(isActive),
+    status: "pending",
+    isActive: false,
     images: Array.isArray(images) ? images : [],
   });
 
-  return res.status(201).json({ message: "Product created", product });
+  return res.status(201).json({ message: "Product created and submitted for approval", product });
 };
 
 const updateProduct = async (req, res, next) => {
@@ -214,14 +227,13 @@ const updateProduct = async (req, res, next) => {
     return res.status(404).json({ message: "Product not found for this seller" });
   }
 
-  const { name, description, price, stock, images, categoryId, isActive } = req.body;
+  const { name, description, price, stock, images, categoryId } = req.body;
 
   if (name !== undefined) product.name = name;
   if (description !== undefined) product.description = description;
   if (price !== undefined) product.price = Number(price);
   if (stock !== undefined) product.stock = Number(stock);
   if (images !== undefined && Array.isArray(images)) product.images = images;
-  if (isActive !== undefined) product.isActive = Boolean(isActive);
   if (categoryId !== undefined) {
     const category = await Category.findOne({ id: Number(categoryId) }).lean();
     if (!category) {
@@ -267,10 +279,15 @@ const updateProductStatus = async (req, res, next) => {
     return res.status(404).json({ message: "Product not found for this seller" });
   }
 
-  product.isActive = Boolean(req.body.isActive);
+  if (product.status === "active") {
+    return res.status(400).json({ message: "Active products do not need resubmission" });
+  }
+
+  product.status = "pending";
+  product.isActive = false;
   await product.save();
 
-  return res.json({ message: "Product status updated", product });
+  return res.json({ message: "Product resubmitted for approval", product });
 };
 
 const getOrders = async (req, res, next) => {

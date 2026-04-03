@@ -38,6 +38,7 @@ const register = async (req, res) => {
   }
 
   const normalizedRole = VALID_ROLES.includes(role) ? role : "customer";
+  const isSellerRegistration = normalizedRole === "seller";
 
   const newUser = await User.create({
     id: await getNextId(User),
@@ -47,14 +48,27 @@ const register = async (req, res) => {
     password,
     confirmPassword: confirmPassword || password,
     role: normalizedRole,
+    sellerInfo: isSellerRegistration
+      ? {
+          isApproved: false,
+          approvalStatus: "pending",
+          requestedAt: new Date(),
+          approvedAt: null,
+        }
+      : {
+          isApproved: false,
+          approvalStatus: "none",
+          requestedAt: null,
+          approvedAt: null,
+        },
     address: null,
     paymentDetails: [],
     wishlist: [],
-    isActive: true,
+    isActive: !isSellerRegistration,
     isDeleted: false,
   });
 
-  if (normalizedRole === "seller") {
+  if (isSellerRegistration) {
     await SellerProfile.create({
       id: await getNextId(SellerProfile),
       userId: newUser.id,
@@ -75,8 +89,9 @@ const register = async (req, res) => {
   }
 
   return res.status(201).json({
-    message: "User registered successfully. Please verify your email.",
+    message: isSellerRegistration ? "Seller account created. Please verify your email and wait for admin approval." : "User registered successfully. Please verify your email.",
     requiresEmailVerification: true,
+    requiresAdminApproval: isSellerRegistration,
     token,
     tokenType: "Bearer",
     expiresIn: JWT_EXPIRES_IN,
@@ -93,7 +108,6 @@ const login = async (req, res) => {
 
   const user = await User.findOne({
     email: String(email).toLowerCase(),
-    isActive: true,
     isDeleted: false,
   });
 
@@ -112,6 +126,17 @@ const login = async (req, res) => {
       requiresEmailVerification: true,
       email: user.email,
     });
+  }
+
+  if (!user.isActive) {
+    if (user.role === "seller") {
+      return res.status(403).json({
+        message: "Seller account is pending admin approval.",
+        requiresAdminApproval: true,
+      });
+    }
+
+    return res.status(403).json({ message: "This account is inactive." });
   }
 
   await User.updateOne({ id: user.id }, { $set: { lastLogin: new Date() } });

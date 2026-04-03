@@ -1,18 +1,85 @@
-const { Product, Category, Review, User } = require("../data/models");
+const { Product, Category, Review, User, SellerProfile, Order } = require("../data/models");
 const { getNextId } = require("../data/store");
+
+const REVIEW_ELIGIBLE_ORDER_STATUSES = ["placed", "confirmed", "processing", "shipped", "delivered"];
+
+const ACTIVE_PRODUCT_QUERY = {
+  $or: [
+    { status: "active" },
+    {
+      status: { $exists: false },
+      isActive: true,
+    },
+  ],
+};
+
+const normalizeProductStatus = (product) => {
+  if (product && typeof product.status === "string") {
+    return product.status;
+  }
+
+  return product && product.isActive === false ? "rejected" : "active";
+};
 
 const toProductView = (product) => {
   const productReviews = product.reviews || [];
   const rating = productReviews.length > 0 ? Number((productReviews.reduce((sum, review) => sum + review.rating, 0) / productReviews.length).toFixed(2)) : null;
 
   const category = product.category || null;
+  const status = normalizeProductStatus(product);
 
   return {
     ...product,
+    status,
+    isActive: status === "active",
     categoryName: category ? category.name : product.categoryName || null,
     rating,
     reviewCount: productReviews.length,
   };
+};
+
+const isProductActive = (product) => normalizeProductStatus(product) === "active";
+
+const isAdmin = (req) => Boolean(req.actor && req.actor.isAuthenticated && req.actor.role === "admin");
+
+const enrichReviewsWithUserNames = async (reviews) => {
+  if (!reviews.length) {
+    return [];
+  }
+
+  const reviewUserIds = [...new Set(reviews.map((review) => review.userId))];
+  const reviewUsers = await User.find({ id: { $in: reviewUserIds } })
+    .select("id name")
+    .lean();
+  const userNameMap = new Map(reviewUsers.map((user) => [user.id, user.name]));
+
+  return reviews.map((review) => ({
+    ...review,
+    userName: userNameMap.get(review.userId) || "Unknown",
+  }));
+};
+
+const hasPurchasedProduct = async (userId, productId) => {
+  const matchedOrder = await Order.findOne({
+    userId: Number(userId),
+    paymentStatus: "paid",
+    status: { $in: REVIEW_ELIGIBLE_ORDER_STATUSES },
+    "items.productId": Number(productId),
+  }).lean();
+
+  return Boolean(matchedOrder);
+};
+
+const canViewInactiveProduct = (req, product) => {
+  if (isAdmin(req)) {
+    return true;
+  }
+
+  if (req.actor && req.actor.isAuthenticated && req.actor.role === "seller") {
+    return Number(product.sellerId) === Number(req.actor.userId);
+  }
+
+  return false;
 };
 
 const requireSellerOrAdmin = (req, res) => {
@@ -38,6 +105,9 @@ const getCategories = async (_req, res) => {
     Category.find({}).sort({ name: 1 }).lean(),
     Product.aggregate([
       {
+        $match: ACTIVE_PRODUCT_QUERY,
+      },
+      {
         $group: {
           _id: "$categoryId",
           itemCount: { $sum: 1 },
@@ -56,35 +126,41 @@ const getCategories = async (_req, res) => {
 };
 
 const listProducts = async (req, res) => {
-  const { q, categoryId, minPrice, maxPrice, inStock, sellerId, sort, limit } = req.query;
-  const query = {};
+  const { q, categoryId, minPrice, maxPrice, inStock, sellerId, sort, limit, includeInactive } = req.query;
+  const andFilters = [];
 
   if (q) {
     const term = String(q).trim();
-    query.$or = [{ name: { $regex: term, $options: "i" } }, { description: { $regex: term, $options: "i" } }];
+    andFilters.push({
+      $or: [{ name: { $regex: term, $options: "i" } }, { description: { $regex: term, $options: "i" } }],
+    });
   }
 
   if (categoryId) {
-    query.categoryId = Number(categoryId);
+    andFilters.push({ categoryId: Number(categoryId) });
   }
 
   if (sellerId) {
-    query.sellerId = Number(sellerId);
+    andFilters.push({ sellerId: Number(sellerId) });
   }
 
-  if (!req.actor || !req.actor.isAuthenticated || !["seller", "admin"].includes(req.actor.role)) {
-    query.isActive = { $ne: false };
+  const shouldIncludeInactive = String(includeInactive).toLowerCase() === "true" && isAdmin(req);
+  if (!shouldIncludeInactive) {
+    andFilters.push(ACTIVE_PRODUCT_QUERY);
   }
 
   if (minPrice !== undefined || maxPrice !== undefined) {
-    query.price = {};
-    if (minPrice !== undefined) query.price.$gte = Number(minPrice);
-    if (maxPrice !== undefined) query.price.$lte = Number(maxPrice);
+    const priceFilter = {};
+    if (minPrice !== undefined) priceFilter.$gte = Number(minPrice);
+    if (maxPrice !== undefined) priceFilter.$lte = Number(maxPrice);
+    andFilters.push({ price: priceFilter });
   }
 
   if (String(inStock).toLowerCase() === "true") {
-    query.stock = { $gt: 0 };
+    andFilters.push({ stock: { $gt: 0 } });
   }
+
+  const query = andFilters.length > 0 ? { $and: andFilters } : {};
 
   const sortMap = {
     "price-asc": { price: 1 },
@@ -132,13 +208,33 @@ const getTopProducts = async (req, res) => {
   const requestedLimit = Number(req.query.limit);
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 20) : 4;
 
-  const products = await Product.find({ isActive: { $ne: false } })
-    .sort({ createdAt: -1, id: -1 })
-    .limit(limit)
-    .lean();
+  const products = await Product.find(ACTIVE_PRODUCT_QUERY).sort({ createdAt: -1, id: -1 }).limit(limit).lean();
 
-  return products;
-}
+  const [categories, reviews] = await Promise.all([Category.find({ id: { $in: products.map((product) => product.categoryId) } }).lean(), Review.find({ productId: { $in: products.map((product) => product.id) } }).lean()]);
+
+  const categoryMap = new Map(categories.map((category) => [category.id, category]));
+  const reviewsByProductId = reviews.reduce((acc, review) => {
+    if (!acc[review.productId]) {
+      acc[review.productId] = [];
+    }
+
+    acc[review.productId].push(review);
+    return acc;
+  }, {});
+
+  const payload = products.map((product) =>
+    toProductView({
+      ...product,
+      category: categoryMap.get(product.categoryId) || null,
+      reviews: reviewsByProductId[product.id] || [],
+    }),
+  );
+
+  return res.json({
+    count: payload.length,
+    products: payload,
+  });
+};
 
 const activateProduct = async (req, res, next) => {
   if (!requireSellerOrAdmin(req, res)) {
@@ -149,14 +245,17 @@ const activateProduct = async (req, res, next) => {
   }
   const product = await Product.findOneAndUpdate(
     { id: Number(req.params.id) },
-    { isActive: true },
-    { new: true }
+    {
+      isActive: true,
+      status: "active",
+    },
+    { new: true },
   ).lean();
   if (!product) {
     return res.status(404).json({ message: "Product not found" });
   }
-  return res.json({ message: "Product activated", product });
-}
+  return res.json({ message: "Product approved", product: toProductView({ ...product, reviews: [] }) });
+};
 
 const deactivateProduct = async (req, res, next) => {
   if (!requireSellerOrAdmin(req, res)) {
@@ -167,14 +266,17 @@ const deactivateProduct = async (req, res, next) => {
   }
   const product = await Product.findOneAndUpdate(
     { id: Number(req.params.id) },
-    { isActive: false },
-    { new: true }
+    {
+      isActive: false,
+      status: "rejected",
+    },
+    { new: true },
   ).lean();
   if (!product) {
     return res.status(404).json({ message: "Product not found" });
   }
-  return res.json({ message: "Product deactivated", product });
-}
+  return res.json({ message: "Product rejected", product: toProductView({ ...product, reviews: [] }) });
+};
 
 const createProduct = async (req, res) => {
   if (!requireSellerOrAdmin(req, res)) {
@@ -191,6 +293,7 @@ const createProduct = async (req, res) => {
     return res.status(400).json({ message: "Invalid categoryId" });
   }
 
+  const createdByAdmin = req.actor.role === "admin";
   const product = await Product.create({
     id: await getNextId(Product),
     name,
@@ -200,15 +303,16 @@ const createProduct = async (req, res) => {
     categoryId: Number(categoryId),
     stock: Number(stock),
     sellerId: req.actor.userId,
+    status: createdByAdmin ? "active" : "pending",
+    isActive: createdByAdmin,
     images: Array.isArray(images) ? images : [],
   });
 
   return res.status(201).json({
-    message: "Product created",
+    message: createdByAdmin ? "Product created" : "Product created and submitted for approval",
     product: toProductView({ ...product.toObject(), category, reviews: [] }),
   });
 };
-
 
 const getProductById = async (req, res) => {
   const product = await findProductById(req.params.id);
@@ -217,23 +321,34 @@ const getProductById = async (req, res) => {
     return res.status(404).json({ message: "Product not found" });
   }
 
-  const [category, productReviews] = await Promise.all([Category.findOne({ id: product.categoryId }).lean(), Review.find({ productId: product.id }).lean()]);
+  if (!isProductActive(product) && !canViewInactiveProduct(req, product)) {
+    return res.status(404).json({ message: "Product not found" });
+  }
 
-  const reviewUserIds = [...new Set(productReviews.map((review) => review.userId))];
-  const reviewUsers = await User.find({ id: { $in: reviewUserIds } }).lean();
-  const userNameMap = new Map(reviewUsers.map((user) => [user.id, user.name]));
+  const [category, productReviews, sellerUser, sellerProfile] = await Promise.all([
+    Category.findOne({ id: product.categoryId }).lean(),
+    Review.find({ productId: product.id }).sort({ createdAt: -1, id: -1 }).lean(),
+    User.findOne({ id: product.sellerId }).select("id name email phone").lean(),
+    SellerProfile.findOne({ userId: product.sellerId }).select("storeName isApproved").lean(),
+  ]);
 
-  const productReviewsWithUsers = productReviews.map((review) => ({
-    ...review,
-    userName: userNameMap.get(review.userId) || "Unknown",
-  }));
+  const productReviewsWithUsers = await enrichReviewsWithUserNames(productReviews);
 
   return res.json({
     ...toProductView({ ...product, category, reviews: productReviews }),
+    seller: sellerUser
+      ? {
+          id: sellerUser.id,
+          name: sellerUser.name,
+          email: sellerUser.email,
+          phone: sellerUser.phone,
+          storeName: sellerProfile ? sellerProfile.storeName : null,
+          isApproved: sellerProfile ? Boolean(sellerProfile.isApproved) : null,
+        }
+      : null,
     reviews: productReviewsWithUsers,
   });
 };
-
 
 const updateProductStock = async (req, res) => {
   if (!requireSellerOrAdmin(req, res)) {
@@ -270,15 +385,12 @@ const getProductReviews = async (req, res) => {
     return res.status(404).json({ message: "Product not found" });
   }
 
-  const productReviews = await Review.find({ productId: product.id }).lean();
-  const reviewUserIds = [...new Set(productReviews.map((review) => review.userId))];
-  const reviewUsers = await User.find({ id: { $in: reviewUserIds } }).lean();
-  const userNameMap = new Map(reviewUsers.map((user) => [user.id, user.name]));
+  if (!isProductActive(product) && !canViewInactiveProduct(req, product)) {
+    return res.status(404).json({ message: "Product not found" });
+  }
 
-  const enrichedReviews = productReviews.map((review) => ({
-    ...review,
-    userName: userNameMap.get(review.userId) || "Unknown",
-  }));
+  const productReviews = await Review.find({ productId: product.id }).sort({ createdAt: -1, id: -1 }).lean();
+  const enrichedReviews = await enrichReviewsWithUserNames(productReviews);
 
   return res.json({ count: enrichedReviews.length, reviews: enrichedReviews });
 };
@@ -293,6 +405,20 @@ const createProductReview = async (req, res) => {
     return res.status(404).json({ message: "Product not found" });
   }
 
+  if (!isProductActive(product)) {
+    return res.status(400).json({ message: "Cannot review a non-active product" });
+  }
+
+  const purchased = await hasPurchasedProduct(req.actor.userId, product.id);
+  if (!purchased) {
+    return res.status(403).json({ message: "You can only review products you have purchased" });
+  }
+
+  const existingReview = await Review.findOne({ productId: product.id, userId: req.actor.userId }).lean();
+  if (existingReview) {
+    return res.status(409).json({ message: "You have already reviewed this product" });
+  }
+
   const { rating, comment = "" } = req.body;
   const normalizedRating = Number(rating);
 
@@ -305,11 +431,90 @@ const createProductReview = async (req, res) => {
     productId: product.id,
     userId: req.actor.userId,
     rating: normalizedRating,
-    comment,
+    comment: typeof comment === "string" ? comment.trim() : "",
     createdAt: new Date().toISOString(),
   });
 
-  return res.status(201).json({ message: "Review submitted", review });
+  const [enrichedReview] = await enrichReviewsWithUserNames([review.toObject()]);
+
+  return res.status(201).json({ message: "Review submitted", review: enrichedReview });
+};
+
+const updateProductReview = async (req, res) => {
+  if (!req.actor || !req.actor.isAuthenticated) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  const product = await findProductById(req.params.id);
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
+
+  const review = await Review.findOne({
+    id: Number(req.params.reviewId),
+    productId: product.id,
+  });
+
+  if (!review) {
+    return res.status(404).json({ message: "Review not found" });
+  }
+
+  const isReviewOwner = Number(review.userId) === Number(req.actor.userId);
+  if (!isReviewOwner) {
+    return res.status(403).json({ message: "You can only update your own review" });
+  }
+
+  const { rating, comment } = req.body;
+  if (rating === undefined && comment === undefined) {
+    return res.status(400).json({ message: "Provide rating or comment to update" });
+  }
+
+  if (rating !== undefined) {
+    const normalizedRating = Number(rating);
+    if (!Number.isInteger(normalizedRating) || normalizedRating < 1 || normalizedRating > 5) {
+      return res.status(400).json({ message: "rating must be an integer from 1 to 5" });
+    }
+
+    review.rating = normalizedRating;
+  }
+
+  if (comment !== undefined) {
+    review.comment = typeof comment === "string" ? comment.trim() : "";
+  }
+
+  await review.save();
+
+  const [enrichedReview] = await enrichReviewsWithUserNames([review.toObject()]);
+  return res.json({ message: "Review updated", review: enrichedReview });
+};
+
+const deleteProductReview = async (req, res) => {
+  if (!req.actor || !req.actor.isAuthenticated) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  const product = await findProductById(req.params.id);
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
+
+  const review = await Review.findOne({
+    id: Number(req.params.reviewId),
+    productId: product.id,
+  }).lean();
+
+  if (!review) {
+    return res.status(404).json({ message: "Review not found" });
+  }
+
+  const isReviewOwner = Number(review.userId) === Number(req.actor.userId);
+  if (!isReviewOwner) {
+    return res.status(403).json({ message: "You can only delete your own review" });
+  }
+
+  await Review.deleteOne({ id: review.id, productId: product.id });
+
+  return res.json({ message: "Review deleted", reviewId: review.id });
 };
 
 const deleteProduct = async (req, res) => {
@@ -328,7 +533,6 @@ const deleteProduct = async (req, res) => {
   return res.json({ message: "Product deleted", product });
 };
 
-
 module.exports = {
   getCategories,
   listProducts,
@@ -337,6 +541,8 @@ module.exports = {
   updateProductStock,
   getProductReviews,
   createProductReview,
+  updateProductReview,
+  deleteProductReview,
   activateProduct,
   deleteProduct,
   deactivateProduct,

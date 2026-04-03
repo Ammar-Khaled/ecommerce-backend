@@ -13,7 +13,7 @@ const authSchemas = {
     phone: Joi.string().trim().min(7).max(20).allow(null),
     password: Joi.string().min(8).required(),
     confirmPassword: Joi.string().valid(Joi.ref("password")).required(),
-    role: Joi.string().valid("customer", "seller", "admin").default("customer"),
+    role: Joi.string().valid("customer", "seller").default("customer"),
   }).unknown(false),
   login: Joi.object({
     email: Joi.string().trim().email().required(),
@@ -64,6 +64,7 @@ const productSchemas = {
     maxPrice: nonNegativeNumber,
     inStock: Joi.boolean(),
     sellerId: positiveId,
+    includeInactive: Joi.boolean(),
     limit: Joi.number().integer().min(1).max(100),
     sort: Joi.string().valid("price-asc", "price-desc", "name-asc"),
   }).unknown(false),
@@ -86,6 +87,16 @@ const productSchemas = {
     rating: Joi.number().integer().min(1).max(5).required(),
     comment: Joi.string().trim().max(2000).default(""),
   }).unknown(false),
+  reviewIdParam: Joi.object({
+    id: positiveId.required(),
+    reviewId: positiveId.required(),
+  }).unknown(false),
+  reviewUpdateBody: Joi.object({
+    rating: Joi.number().integer().min(1).max(5),
+    comment: Joi.string().trim().max(2000),
+  })
+    .min(1)
+    .unknown(false),
 };
 
 const cartSchemas = {
@@ -155,7 +166,6 @@ const sellerSchemas = {
     price: nonNegativeNumber.required(),
     categoryId: positiveId.required(),
     stock: Joi.number().integer().min(0).default(0),
-    isActive: Joi.boolean(),
     images: Joi.array().items(Joi.string().trim().min(1)).default([]),
   }).unknown(false),
   updateProduct: Joi.object({
@@ -164,13 +174,12 @@ const sellerSchemas = {
     price: nonNegativeNumber,
     stock: Joi.number().integer().min(0),
     categoryId: positiveId,
-    isActive: Joi.boolean(),
     images: Joi.array().items(Joi.string().trim().min(1)),
   })
     .min(1)
     .unknown(false),
   updateProductStatus: Joi.object({
-    isActive: Joi.boolean().required(),
+    isActive: Joi.boolean(),
   }).unknown(false),
 };
 
@@ -191,6 +200,7 @@ const adminSchemas = {
     categoryId: positiveId.required(),
     stock: Joi.number().integer().min(0).default(0),
     sellerId: positiveId,
+    images: Joi.array().items(Joi.string().trim().min(1)).default([]),
   }).unknown(false),
   orderShipping: Joi.object({
     shippingStatus: Joi.string().trim().min(1).max(50),
