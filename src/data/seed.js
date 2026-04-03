@@ -82,6 +82,7 @@ const seedDatabase = async () => {
         stock: 50,
         sellerId: 2,
         images: ["https://picsum.photos/seed/shirt/640/480"],
+        isActive: true,
       },
       {
         id: 2,
@@ -93,6 +94,7 @@ const seedDatabase = async () => {
         stock: 35,
         sellerId: 2,
         images: ["https://picsum.photos/seed/jeans/640/480"],
+        isActive: true,
       },
       {
         id: 3,
@@ -104,6 +106,7 @@ const seedDatabase = async () => {
         stock: 20,
         sellerId: 2,
         images: ["https://picsum.photos/seed/sneaker/640/480"],
+        isActive: true,
       },
       {
         id: 4,
@@ -115,6 +118,7 @@ const seedDatabase = async () => {
         stock: 40,
         sellerId: 2,
         images: ["https://picsum.photos/seed/wallet/640/480"],
+        isActive: false,
       },
     ]);
   }
