@@ -22,7 +22,7 @@ const createPaymentSession = async (order) => {
             display: "en",
             allowedMethods: "card,wallet",
             merchantRedirect: process.env.KASHIER_REDIRECT_URL || "http://localhost:4200/payment/result",
-            redirectMethod: null,
+            redirectMethod:  "GET",
             failureRedirect: false,
             iframeBackgroundColor: "#FFFFFF",
             merchantId: process.env.KASHIER_MERCHANT_ID,

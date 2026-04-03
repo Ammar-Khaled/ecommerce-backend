@@ -7,7 +7,11 @@ const router = express.Router();
 
 router.get("/methods", paymentsController.getMethods);
 router.post("/intent", validateRequest({ body: paymentSchemas.createIntent }), paymentsController.createIntent);
-router.post("/webhook", validateRequest({ body: paymentSchemas.webhookBody }), paymentsController.webhook);
+router.post("/webhook", paymentsController.webhook);
 router.get("/status/:orderId", validateRequest({ params: paymentSchemas.orderIdParam }), paymentsController.getPaymentStatus);
-
+router.post(
+    "/wallet/confirm",
+    validateRequest({ body: paymentSchemas.confirmWallet }),
+    paymentsController.confirmWallet
+);
 module.exports = router;

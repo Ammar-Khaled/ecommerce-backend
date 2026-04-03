@@ -3,7 +3,20 @@ const paymentService = require("../services/payment.service");
 const getMethods = (_req, res) => {
     return res.json({ methods: paymentService.getPaymentMethods() });
 };
+const confirmWallet = async (req, res, next) => {
+    try {
+        const { orderId, walletPhone } = req.body;
+        const result = await paymentService.confirmWalletPayment(orderId, walletPhone, req.actor);
 
+        if (result.error) {
+            return res.status(result.status).json({ message: result.error });
+        }
+
+        return res.json(result);
+    } catch (err) {
+        next(err);
+    }
+};
 const createIntent = async (req, res) => {
     if (!req.actor || !req.actor.isAuthenticated) {
         return res.status(401).json({ message: "Authentication required" });
@@ -64,4 +77,5 @@ module.exports = {
     createIntent,
     webhook,
     getPaymentStatus,
+    confirmWallet,
 };
