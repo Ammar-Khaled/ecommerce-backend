@@ -11,7 +11,10 @@ router.get("/", validateRequest({ query: productSchemas.listQuery }), productsCo
 router.get("/:id", validateRequest({ params: productSchemas.idParam }), productsController.getProductById);
 router.post("/", validateRequest({ body: productSchemas.createProduct }), productsController.createProduct);
 router.patch("/:id/stock", validateRequest({ params: productSchemas.idParam, body: productSchemas.updateStock }), productsController.updateProductStock);
+router.patch("/:id/activate", validateRequest({ params: productSchemas.idParam }), productsController.activateProduct);
+router.patch("/:id/deactivate", validateRequest({ params: productSchemas.idParam }), productsController.deactivateProduct);
 router.get("/:id/reviews", validateRequest({ params: productSchemas.idParam }), productsController.getProductReviews);
 router.post("/:id/reviews", validateRequest({ params: productSchemas.idParam, body: productSchemas.reviewBody }), productsController.createProductReview);
+router.delete("/:id", validateRequest({ params: productSchemas.idParam }), productsController.deleteProduct);
 
 module.exports = router;

@@ -137,7 +137,46 @@ const getTopProducts = async (req, res) => {
     .limit(limit)
     .lean();
 
-  const [categories, reviews] = await Promise.all([Category.find({ id: { $in: products.map((product) => product.categoryId) } }).lean(), Review.find({ productId: { $in: products.map((product) => product.id) } }).lean()]);
+const activateProduct = async (req, res, next) => {
+    if (!requireSellerOrAdmin(req, res)) {
+        return;
+    }
+    if (req.actor.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can activate products" });
+    }
+    const product = await Product.findOneAndUpdate(
+        { id: Number(req.params.id) },
+        { isActive: true },
+        { new: true }
+    ).lean();
+    if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+    }
+    return res.json({ message: "Product activated", product });  
+}
+
+const deactivateProduct = async (req, res, next) => {
+    if (!requireSellerOrAdmin(req, res)) {
+        return;
+    }
+    if (req.actor.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can deactivate products" });
+    }
+    const product = await Product.findOneAndUpdate(
+        { id: Number(req.params.id) },
+        { isActive: false },
+        { new: true }
+    ).lean();
+    if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+    }
+    return res.json({ message: "Product deactivated", product });
+}
+
+const createProduct = async (req, res) => {
+    if (!requireSellerOrAdmin(req, res)) {
+        return;
+    }
 
   const categoryMap = new Map(categories.map((category) => [category.id, category]));
   const reviewsByProductId = reviews.reduce((acc, review) => {
@@ -294,13 +333,32 @@ const createProductReview = async (req, res) => {
   return res.status(201).json({ message: "Review submitted", review });
 };
 
+const deleteProduct = async (req, res) => {
+    if (!requireSellerOrAdmin(req, res)) {
+        return;
+    }
+    if (req.actor.role !== "admin") {
+        return res.status(403).json({ message: "Only admins can delete products" });
+    }
+
+    const product = await Product.findOneAndDelete({ id: Number(req.params.id) }).lean();
+    if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+    }
+
+    return res.json({ message: "Product deleted", product });
+};
+
+
 module.exports = {
-  getCategories,
-  listProducts,
-  getTopProducts,
-  getProductById,
-  createProduct,
-  updateProductStock,
-  getProductReviews,
-  createProductReview,
+    getCategories,
+    listProducts,
+    getProductById,
+    createProduct,
+    updateProductStock,
+    getProductReviews,
+    createProductReview,
+    activateProduct,
+    deleteProduct,
+    deactivateProduct,
 };
