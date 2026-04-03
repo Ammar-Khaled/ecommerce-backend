@@ -137,6 +137,31 @@ const getTopProducts = async (req, res) => {
     .limit(limit)
     .lean();
 
+  const [categories, reviews] = await Promise.all([
+    Category.find({}).lean(),
+    Review.find({ productId: { $in: products.map((product) => product.id) } }).lean(),
+  ]);
+
+  const categoryMap = new Map(categories.map((category) => [category.id, category]));
+  const reviewsByProductId = reviews.reduce((acc, review) => {
+    if (!acc[review.productId]) {
+      acc[review.productId] = [];
+    }
+    acc[review.productId].push(review);
+    return acc;
+  }, {});
+
+  const result = products.map((product) => {
+    return toProductView({
+      ...product,
+      category: categoryMap.get(product.categoryId) || null,
+      reviews: reviewsByProductId[product.id] || [],
+    });
+  });
+
+  return res.json({ count: result.length, products: result });
+};
+
 const activateProduct = async (req, res, next) => {
     if (!requireSellerOrAdmin(req, res)) {
         return;
@@ -174,56 +199,6 @@ const deactivateProduct = async (req, res, next) => {
 }
 
 const createProduct = async (req, res) => {
-    if (!requireSellerOrAdmin(req, res)) {
-        return;
-    }
-
-  const categoryMap = new Map(categories.map((category) => [category.id, category]));
-  const reviewsByProductId = reviews.reduce((acc, review) => {
-    if (!acc[review.productId]) {
-      acc[review.productId] = [];
-    }
-
-    acc[review.productId].push(review);
-    return acc;
-  }, {});
-
-  const result = products.map((product) => {
-    return toProductView({
-      ...product,
-      category: categoryMap.get(product.categoryId) || null,
-      reviews: reviewsByProductId[product.id] || [],
-    });
-  });
-
-  return res.json({ count: result.length, products: result });
-};
-
-const getProductById = async (req, res) => {
-  const product = await findProductById(req.params.id);
-
-  if (!product) {
-    return res.status(404).json({ message: "Product not found" });
-  }
-
-  const [category, productReviews] = await Promise.all([Category.findOne({ id: product.categoryId }).lean(), Review.find({ productId: product.id }).lean()]);
-
-  const reviewUserIds = [...new Set(productReviews.map((review) => review.userId))];
-  const reviewUsers = await User.find({ id: { $in: reviewUserIds } }).lean();
-  const userNameMap = new Map(reviewUsers.map((user) => [user.id, user.name]));
-
-  const productReviewsWithUsers = productReviews.map((review) => ({
-    ...review,
-    userName: userNameMap.get(review.userId) || "Unknown",
-  }));
-
-  return res.json({
-    ...toProductView({ ...product, category, reviews: productReviews }),
-    reviews: productReviewsWithUsers,
-  });
-};
-
-const createProduct = async (req, res) => {
   if (!requireSellerOrAdmin(req, res)) {
     return;
   }
@@ -253,6 +228,30 @@ const createProduct = async (req, res) => {
   return res.status(201).json({
     message: "Product created",
     product: toProductView({ ...product.toObject(), category, reviews: [] }),
+  });
+};
+
+const getProductById = async (req, res) => {
+  const product = await findProductById(req.params.id);
+
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
+
+  const [category, productReviews] = await Promise.all([Category.findOne({ id: product.categoryId }).lean(), Review.find({ productId: product.id }).lean()]);
+
+  const reviewUserIds = [...new Set(productReviews.map((review) => review.userId))];
+  const reviewUsers = await User.find({ id: { $in: reviewUserIds } }).lean();
+  const userNameMap = new Map(reviewUsers.map((user) => [user.id, user.name]));
+
+  const productReviewsWithUsers = productReviews.map((review) => ({
+    ...review,
+    userName: userNameMap.get(review.userId) || "Unknown",
+  }));
+
+  return res.json({
+    ...toProductView({ ...product, category, reviews: productReviews }),
+    reviews: productReviewsWithUsers,
   });
 };
 
@@ -353,6 +352,7 @@ const deleteProduct = async (req, res) => {
 module.exports = {
     getCategories,
     listProducts,
+    getTopProducts,
     getProductById,
     createProduct,
     updateProductStock,
