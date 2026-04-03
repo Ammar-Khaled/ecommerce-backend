@@ -137,91 +137,44 @@ const getTopProducts = async (req, res) => {
     .limit(limit)
     .lean();
 
+  return products;
+}
+
 const activateProduct = async (req, res, next) => {
-    if (!requireSellerOrAdmin(req, res)) {
-        return;
-    }
-    if (req.actor.role !== "admin") {
-        return res.status(403).json({ message: "Only admins can activate products" });
-    }
-    const product = await Product.findOneAndUpdate(
-        { id: Number(req.params.id) },
-        { isActive: true },
-        { new: true }
-    ).lean();
-    if (!product) {
-        return res.status(404).json({ message: "Product not found" });
-    }
-    return res.json({ message: "Product activated", product });  
-}
-
-const deactivateProduct = async (req, res, next) => {
-    if (!requireSellerOrAdmin(req, res)) {
-        return;
-    }
-    if (req.actor.role !== "admin") {
-        return res.status(403).json({ message: "Only admins can deactivate products" });
-    }
-    const product = await Product.findOneAndUpdate(
-        { id: Number(req.params.id) },
-        { isActive: false },
-        { new: true }
-    ).lean();
-    if (!product) {
-        return res.status(404).json({ message: "Product not found" });
-    }
-    return res.json({ message: "Product deactivated", product });
-}
-
-const createProduct = async (req, res) => {
-    if (!requireSellerOrAdmin(req, res)) {
-        return;
-    }
-
-  const categoryMap = new Map(categories.map((category) => [category.id, category]));
-  const reviewsByProductId = reviews.reduce((acc, review) => {
-    if (!acc[review.productId]) {
-      acc[review.productId] = [];
-    }
-
-    acc[review.productId].push(review);
-    return acc;
-  }, {});
-
-  const result = products.map((product) => {
-    return toProductView({
-      ...product,
-      category: categoryMap.get(product.categoryId) || null,
-      reviews: reviewsByProductId[product.id] || [],
-    });
-  });
-
-  return res.json({ count: result.length, products: result });
-};
-
-const getProductById = async (req, res) => {
-  const product = await findProductById(req.params.id);
-
+  if (!requireSellerOrAdmin(req, res)) {
+    return;
+  }
+  if (req.actor.role !== "admin") {
+    return res.status(403).json({ message: "Only admins can activate products" });
+  }
+  const product = await Product.findOneAndUpdate(
+    { id: Number(req.params.id) },
+    { isActive: true },
+    { new: true }
+  ).lean();
   if (!product) {
     return res.status(404).json({ message: "Product not found" });
   }
+  return res.json({ message: "Product activated", product });
+}
 
-  const [category, productReviews] = await Promise.all([Category.findOne({ id: product.categoryId }).lean(), Review.find({ productId: product.id }).lean()]);
-
-  const reviewUserIds = [...new Set(productReviews.map((review) => review.userId))];
-  const reviewUsers = await User.find({ id: { $in: reviewUserIds } }).lean();
-  const userNameMap = new Map(reviewUsers.map((user) => [user.id, user.name]));
-
-  const productReviewsWithUsers = productReviews.map((review) => ({
-    ...review,
-    userName: userNameMap.get(review.userId) || "Unknown",
-  }));
-
-  return res.json({
-    ...toProductView({ ...product, category, reviews: productReviews }),
-    reviews: productReviewsWithUsers,
-  });
-};
+const deactivateProduct = async (req, res, next) => {
+  if (!requireSellerOrAdmin(req, res)) {
+    return;
+  }
+  if (req.actor.role !== "admin") {
+    return res.status(403).json({ message: "Only admins can deactivate products" });
+  }
+  const product = await Product.findOneAndUpdate(
+    { id: Number(req.params.id) },
+    { isActive: false },
+    { new: true }
+  ).lean();
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
+  return res.json({ message: "Product deactivated", product });
+}
 
 const createProduct = async (req, res) => {
   if (!requireSellerOrAdmin(req, res)) {
@@ -255,6 +208,32 @@ const createProduct = async (req, res) => {
     product: toProductView({ ...product.toObject(), category, reviews: [] }),
   });
 };
+
+
+const getProductById = async (req, res) => {
+  const product = await findProductById(req.params.id);
+
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
+
+  const [category, productReviews] = await Promise.all([Category.findOne({ id: product.categoryId }).lean(), Review.find({ productId: product.id }).lean()]);
+
+  const reviewUserIds = [...new Set(productReviews.map((review) => review.userId))];
+  const reviewUsers = await User.find({ id: { $in: reviewUserIds } }).lean();
+  const userNameMap = new Map(reviewUsers.map((user) => [user.id, user.name]));
+
+  const productReviewsWithUsers = productReviews.map((review) => ({
+    ...review,
+    userName: userNameMap.get(review.userId) || "Unknown",
+  }));
+
+  return res.json({
+    ...toProductView({ ...product, category, reviews: productReviews }),
+    reviews: productReviewsWithUsers,
+  });
+};
+
 
 const updateProductStock = async (req, res) => {
   if (!requireSellerOrAdmin(req, res)) {
@@ -334,31 +313,31 @@ const createProductReview = async (req, res) => {
 };
 
 const deleteProduct = async (req, res) => {
-    if (!requireSellerOrAdmin(req, res)) {
-        return;
-    }
-    if (req.actor.role !== "admin") {
-        return res.status(403).json({ message: "Only admins can delete products" });
-    }
+  if (!requireSellerOrAdmin(req, res)) {
+    return;
+  }
+  if (req.actor.role !== "admin") {
+    return res.status(403).json({ message: "Only admins can delete products" });
+  }
 
-    const product = await Product.findOneAndDelete({ id: Number(req.params.id) }).lean();
-    if (!product) {
-        return res.status(404).json({ message: "Product not found" });
-    }
+  const product = await Product.findOneAndDelete({ id: Number(req.params.id) }).lean();
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
 
-    return res.json({ message: "Product deleted", product });
+  return res.json({ message: "Product deleted", product });
 };
 
 
 module.exports = {
-    getCategories,
-    listProducts,
-    getProductById,
-    createProduct,
-    updateProductStock,
-    getProductReviews,
-    createProductReview,
-    activateProduct,
-    deleteProduct,
-    deactivateProduct,
+  getCategories,
+  listProducts,
+  getProductById,
+  createProduct,
+  updateProductStock,
+  getProductReviews,
+  createProductReview,
+  activateProduct,
+  deleteProduct,
+  deactivateProduct,
 };
