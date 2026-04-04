@@ -204,6 +204,7 @@ const listProducts = async (req, res) => {
   });
 };
 
+// 
 const getTopProducts = async (req, res) => {
   const requestedLimit = Number(req.query.limit);
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 20) : 4;
