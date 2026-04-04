@@ -2,6 +2,7 @@ const express = require("express");
 const adminController = require("../controllers/admin.controller");
 const validateRequest = require("../middlewares/validateRequest");
 const { adminSchemas } = require("../validation/schemas");
+const { uploadCategoryImage } = require("../config/fileUpload");
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.patch(
     adminController.unrestrictUser
 );
 router.delete("/users/:id", validateRequest({ params: adminSchemas.userIdParam }), adminController.deleteUser);
-router.post("/categories", validateRequest({ body: adminSchemas.createCategory }), adminController.createCategory);
+router.post("/categories", uploadCategoryImage, validateRequest({ body: adminSchemas.createCategory }), adminController.createCategory);
 router.post("/products", validateRequest({ body: adminSchemas.createProduct }), adminController.createProduct);
 router.patch(
     "/orders/:id/shipping",

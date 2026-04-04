@@ -114,7 +114,16 @@ const createCategory = async (req, res, next) => {
     return res.status(400).json({ message: "name is required" });
   }
 
-  const category = await Category.create({ id: await getNextId(Category), name });
+  if (!req.file) {
+    return res.status(400).json({ message: "image is required" });
+  }
+
+  const category = await Category.create({
+    id: await getNextId(Category),
+    name,
+    imageUrl: `/uploads/categories/${req.file.filename}`,
+    imageFileId: null,
+  });
   return res.status(201).json({ message: "Category created", category });
 };
 

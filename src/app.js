@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const path = require("path");
 
 const attachActor = require("./middlewares/actor.middleware");
 const authRouter = require("./routes/auth.routes");
@@ -20,6 +21,7 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));
 app.use(attachActor);
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.get("/api/health", (_req, res) => {
   res.json({
