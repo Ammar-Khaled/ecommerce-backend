@@ -208,8 +208,82 @@ const getTopProducts = async (req, res) => {
   const requestedLimit = Number(req.query.limit);
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 20) : 4;
 
-  const products = await Product.find(ACTIVE_PRODUCT_QUERY).sort({ createdAt: -1, id: -1 }).limit(limit).lean();
+  const orderStats = await Order.aggregate([
+    {
+      $match: {
+        paymentStatus: "paid",
+        status: { $in: REVIEW_ELIGIBLE_ORDER_STATUSES },
+      },
+    },
+    {
+      $unwind: "$items",
+    },
+    {
+      $group: {
+        _id: "$items.productId",
+        orderCount: { $sum: 1 },
+        quantitySold: { $sum: "$items.quantity" },
+        lastOrderedAt: { $max: "$createdAt" },
+      },
+    },
+    {
+      $sort: {
+        orderCount: -1,
+        quantitySold: -1,
+        lastOrderedAt: -1,
+        _id: 1,
+      },
+    },
+    {
+      $limit: Math.max(limit * 5, limit),
+    },
+  ]);
 
+  const orderCountByProductId = new Map(orderStats.map((entry) => [Number(entry._id), Number(entry.orderCount) || 0]));
+  const topOrderedProductIds = orderStats.map((entry) => Number(entry._id));
+
+  const topOrderedProducts =
+    topOrderedProductIds.length > 0
+      ? await Product.find({
+          id: { $in: topOrderedProductIds },
+          ...ACTIVE_PRODUCT_QUERY,
+        }).lean()
+      : [];
+
+  const productById = new Map(topOrderedProducts.map((product) => [product.id, product]));
+  const selectedProducts = [];
+  const selectedProductIds = new Set();
+
+  for (const productId of topOrderedProductIds) {
+    if (selectedProducts.length >= limit) {
+      break;
+    }
+
+    const product = productById.get(productId);
+    if (!product) {
+      continue;
+    }
+
+    selectedProducts.push(product);
+    selectedProductIds.add(product.id);
+  }
+
+  if (selectedProducts.length < limit) {
+    const fallbackProducts = await Product.find({
+      ...ACTIVE_PRODUCT_QUERY,
+      id: { $nin: Array.from(selectedProductIds) },
+    })
+      .sort({ createdAt: -1, id: -1 })
+      .limit(limit - selectedProducts.length)
+      .lean();
+
+    for (const fallbackProduct of fallbackProducts) {
+      selectedProducts.push(fallbackProduct);
+      selectedProductIds.add(fallbackProduct.id);
+    }
+  }
+
+  const products = selectedProducts.slice(0, limit);
   const [categories, reviews] = await Promise.all([Category.find({ id: { $in: products.map((product) => product.categoryId) } }).lean(), Review.find({ productId: { $in: products.map((product) => product.id) } }).lean()]);
 
   const categoryMap = new Map(categories.map((category) => [category.id, category]));
@@ -227,6 +301,7 @@ const getTopProducts = async (req, res) => {
       ...product,
       category: categoryMap.get(product.categoryId) || null,
       reviews: reviewsByProductId[product.id] || [],
+      orderCount: orderCountByProductId.get(product.id) || 0,
     }),
   );
 
