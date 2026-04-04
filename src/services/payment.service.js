@@ -11,7 +11,75 @@ const METHODS = [
 const getPaymentMethods = () => {
     return METHODS;
 };
+const confirmWalletPayment = async (orderId, walletPhone, actor) => {
+    const order = await Order.findOne({ id: Number(orderId) });
 
+    if (!order) {
+        return { error: "Order not found", status: 404 };
+    }
+
+    // 🔧 FIX: Allow guests who own the order (match by ownerKey or no userId)
+    if (actor && actor.isAuthenticated) {
+        // Authenticated user — must be owner or admin
+        if (order.userId !== actor.userId && actor.role !== "admin") {
+            return { error: "Not allowed", status: 403 };
+        }
+    } else {
+        // Guest — only allow if order has no userId (guest order)
+        if (order.userId !== null) {
+            return { error: "Authentication required", status: 401 };
+        }
+    }
+
+    if (order.paymentMethod !== "wallet") {
+        return { error: "This order is not a wallet payment", status: 400 };
+    }
+
+    if (order.paymentStatus === "paid") {
+        return { error: "Order is already paid", status: 400 };
+    }
+
+    if (order.status === "cancelled") {
+        return { error: "Cannot pay for a cancelled order", status: 400 };
+    }
+
+    // ── Everything below is UNCHANGED ──
+    order.paymentStatus = "paid";
+    order.status = "placed";
+    order.walletPhone = walletPhone || null;
+    order.updatedAt = new Date().toISOString();
+
+    for (const item of order.items) {
+        await Product.updateOne(
+            { id: item.productId },
+            { $inc: { stock: -item.quantity } }
+        );
+    }
+
+    await order.save();
+
+    if (order.userId) {
+        await Notification.create({
+            id: await getNextId(Notification),
+            userId: order.userId,
+            type: "payment-success",
+            message: `Wallet payment for Order #${order.id} was successful`,
+        });
+
+        await Notification.create({
+            id: await getNextId(Notification),
+            userId: order.userId,
+            type: "order-confirmation",
+            message: `Order #${order.id} placed successfully`,
+        });
+    }
+
+    return {
+        orderId: order.id,
+        paymentStatus: order.paymentStatus,
+        status: order.status,
+    };
+};
 const createPaymentIntent = async (orderId, actor) => {
     const order = await Order.findOne({ id: Number(orderId) });
 
@@ -37,13 +105,14 @@ const createPaymentIntent = async (orderId, actor) => {
 
     const { kashierOrderId, sessionData } = await kashierService.createPaymentSession(order);
 
+    const sessionUrl = sessionData?.response?.sessionUrl
+        || sessionData?.response?.url
+        || sessionData?.sessionUrl
+        || sessionData?.paymentUrl
+        || null;
+
     order.kashierOrderId = kashierOrderId;
-
-    const sessionUrl = sessionData?.response?.sessionUrl || sessionData?.response?.url || null;
-    if (sessionUrl) {
-        order.kashierSessionUrl = sessionUrl;
-    }
-
+    order.kashierSessionUrl = sessionUrl;
     order.updatedAt = new Date().toISOString();
     await order.save();
 
@@ -144,4 +213,5 @@ module.exports = {
     createPaymentIntent,
     processWebhook,
     getStatus,
+    confirmWalletPayment,
 };

@@ -118,12 +118,13 @@ const cartSchemas = {
   removeItemParams: Joi.object({
     productId: positiveId.required(),
   }).unknown(false),
-  checkoutBody: Joi.object({
+ checkoutBody: Joi.object({
     paymentMethod: Joi.string().valid("card", "paypal", "cod", "wallet").default("cod"),
     shippingAddress: mixedField,
     guestInfo: mixedField,
     guestId: Joi.string().trim().min(1).max(100),
-  }).unknown(false),
+    walletPhone: Joi.string().trim().max(20).allow(null, ""),  
+}).unknown(false),
 };
 
 const orderSchemas = {
@@ -136,13 +137,17 @@ const orderSchemas = {
 };
 
 const paymentSchemas = {
-  createIntent: Joi.object({
-    orderId: positiveId.required(),
-  }).unknown(false),
-  webhookBody: Joi.object().unknown(true),
-  orderIdParam: Joi.object({
-    orderId: positiveId.required(),
-  }).unknown(false),
+    createIntent: Joi.object({
+        orderId: positiveId.required(),
+    }).unknown(false),
+    webhookBody: Joi.object().unknown(true),
+    orderIdParam: Joi.object({
+        orderId: positiveId.required(),
+    }).unknown(false),
+    confirmWallet: Joi.object({
+        orderId: positiveId.required(),
+        walletPhone: Joi.string().trim().min(10).max(20).required(),
+    }).unknown(false),
 };
 
 const sellerSchemas = {
