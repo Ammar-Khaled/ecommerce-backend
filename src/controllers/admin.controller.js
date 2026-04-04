@@ -145,7 +145,7 @@ const updateOrderShipping = async (req, res, next) => {
 
     const order = await Order.findOneAndUpdate(
         { id: Number(req.params.id) },
-        { $set: { shippingStatus: req.body.shippingStatus || "processing" } },
+        { $set: { status: req.body.shippingStatus || "processing" } },
         { new: true }
     ).lean();
 
