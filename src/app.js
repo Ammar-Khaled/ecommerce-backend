@@ -12,6 +12,7 @@ const paymentsRouter = require("./routes/payments.routes");
 const adminRouter = require("./routes/admin.routes");
 const sellerRouter = require("./routes/seller.routes");
 const notificationsRouter = require("./routes/notifications.routes");
+const reviewsRouter = require("./routes/reviews.routes");
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use("/api/payments", paymentsRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/seller", sellerRouter);
 app.use("/api/notifications", notificationsRouter);
+app.use("/api/reviews", reviewsRouter);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
