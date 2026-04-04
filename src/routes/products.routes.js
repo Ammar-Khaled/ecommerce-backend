@@ -15,6 +15,8 @@ router.patch("/:id/activate", validateRequest({ params: productSchemas.idParam }
 router.patch("/:id/deactivate", validateRequest({ params: productSchemas.idParam }), productsController.deactivateProduct);
 router.get("/:id/reviews", validateRequest({ params: productSchemas.idParam }), productsController.getProductReviews);
 router.post("/:id/reviews", validateRequest({ params: productSchemas.idParam, body: productSchemas.reviewBody }), productsController.createProductReview);
+router.patch("/:id/reviews/:reviewId", validateRequest({ params: productSchemas.reviewIdParam, body: productSchemas.reviewUpdateBody }), productsController.updateProductReview);
+router.delete("/:id/reviews/:reviewId", validateRequest({ params: productSchemas.reviewIdParam }), productsController.deleteProductReview);
 router.delete("/:id", validateRequest({ params: productSchemas.idParam }), productsController.deleteProduct);
 
 module.exports = router;
